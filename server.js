@@ -5,7 +5,14 @@ const app = express();
 app.get("/", (req, res) => {
   res.json({
     status: "alive",
-    message: "GID Replay Parser Online"
+    message: "GID Replay Parser Online ya bihh"
+  });
+});
+
+app.get("/upload-demo", (req, res) => {
+  res.json({
+    status: "success",
+    message: "Upload endpoint exists"
   });
 });
 
