@@ -10,6 +10,16 @@ const GlobalOffensive = require("globaloffensive");
 
 const app = express();
 
+const steamClient = new SteamUser();
+const csgo = new GlobalOffensive(steamClient);
+
+let pendingSteamGuardCallback = null;
+let steamStatus = {
+  loggedIn: false,
+  steamGuardRequired: false,
+  lastError: null
+};
+
 const r2 = new S3Client({
   region: "auto",
   endpoint: `https://${process.env.R2_ACCOUNT_ID.trim()}.r2.cloudflarestorage.com`,
@@ -294,6 +304,86 @@ app.post("/test-cs2-history", express.json(), async (req, res) => {
     success: false,
     message: "Endpoint shell created. Steam login next."
   });
+});
+
+app.post("/steam-login/start", async (req, res) => {
+  try {
+    steamStatus = {
+      loggedIn: false,
+      steamGuardRequired: false,
+      lastError: null
+    };
+
+    steamClient.logOn({
+      accountName: process.env.STEAM_USERNAME,
+      password: process.env.STEAM_PASSWORD
+    });
+
+    res.json({
+      success: true,
+      message: "Steam login started. Check Railway logs or /steam-status."
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+steamClient.on("steamGuard", (domain, callback) => {
+  console.log("Steam Guard required. Email domain:", domain);
+
+  steamStatus.steamGuardRequired = true;
+  pendingSteamGuardCallback = callback;
+});
+
+app.post("/steam-login/code", express.json(), async (req, res) => {
+  const code = req.body.code;
+
+  if (!code) {
+    return res.status(400).json({
+      success: false,
+      message: "Missing code"
+    });
+  }
+
+  if (!pendingSteamGuardCallback) {
+    return res.status(400).json({
+      success: false,
+      message: "No Steam Guard code is currently pending"
+    });
+  }
+
+  pendingSteamGuardCallback(code);
+  pendingSteamGuardCallback = null;
+  steamStatus.steamGuardRequired = false;
+
+  res.json({
+    success: true,
+    message: "Steam Guard code submitted"
+  });
+});
+
+app.get("/steam-status", (req, res) => {
+  res.json(steamStatus);
+});
+
+steamClient.on("loggedOn", () => {
+  console.log("Steam logged in successfully");
+
+  steamStatus.loggedIn = true;
+  steamStatus.steamGuardRequired = false;
+  steamStatus.lastError = null;
+
+  steamClient.setPersona(SteamUser.EPersonaState.Online);
+  steamClient.gamesPlayed([730]);
+});
+
+steamClient.on("error", (error) => {
+  console.error("Steam error:", error);
+
+  steamStatus.lastError = error.message;
 });
 
 const PORT = process.env.PORT || 3000;
