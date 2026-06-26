@@ -27,6 +27,22 @@ async function streamToString(stream) {
   return Buffer.concat(chunks).toString("utf8");
 }
 
+async function downloadR2FileToDisk(r2Key, localPath) {
+  const result = await r2.send(new GetObjectCommand({
+    Bucket: process.env.R2_BUCKET_NAME.trim(),
+    Key: r2Key
+  }));
+
+  const writeStream = fs.createWriteStream(localPath);
+
+  await new Promise((resolve, reject) => {
+    result.Body.pipe(writeStream);
+    result.Body.on("error", reject);
+    writeStream.on("finish", resolve);
+    writeStream.on("error", reject);
+  });
+}
+
 const upload = multer({
   dest: "uploads/"
 });
@@ -129,6 +145,115 @@ res.json({
     res.status(500).json({
       success: false,
       message: "Demo uploaded, but parsing failed",
+      error: error.message
+    });
+  }
+});
+
+app.post("/parse-demo", express.json(), async (req, res) => {
+  try {
+    const r2Key = req.body.r2Key;
+
+    if (!r2Key) {
+      return res.status(400).json({
+        success: false,
+        message: "Missing r2Key"
+      });
+    }
+
+    const localPath = `uploads/${Date.now()}-parse.dem`;
+
+    await downloadR2FileToDisk(r2Key, localPath);
+
+    const kills = parseEvent(
+      localPath,
+      "player_death",
+      ["attacker_name", "user_name", "weapon", "headshot"],
+      ["total_rounds_played"]
+    );
+
+    const realKills = kills.filter(kill => kill.total_rounds_played > 0);
+
+    const players = {};
+
+    for (const kill of realKills) {
+      const attackerId = kill.attacker_steamid;
+      const victimId = kill.user_steamid;
+
+      if (attackerId) {
+        if (!players[attackerId]) {
+          players[attackerId] = {
+            steamid: attackerId,
+            name: kill.attacker_name,
+            kills: 0,
+            deaths: 0,
+            headshots: 0
+          };
+        }
+
+        players[attackerId].kills += 1;
+
+        if (kill.headshot) {
+          players[attackerId].headshots += 1;
+        }
+      }
+
+      if (victimId) {
+        if (!players[victimId]) {
+          players[victimId] = {
+            steamid: victimId,
+            name: kill.user_name,
+            kills: 0,
+            deaths: 0,
+            headshots: 0
+          };
+        }
+
+        players[victimId].deaths += 1;
+      }
+    }
+
+    const playerStats = Object.values(players)
+      .map(player => ({
+        ...player,
+        kd:
+          player.deaths > 0
+            ? Math.round((player.kills / player.deaths) * 100) / 100
+            : player.kills,
+        killDeathDiff: player.kills - player.deaths,
+        headshotPercent:
+          player.kills > 0
+            ? Math.round((player.headshots / player.kills) * 1000) / 10
+            : 0
+      }))
+      .sort((a, b) => b.kills - a.kills);
+
+    const resultKey = `parsed-results/${Date.now()}-${r2Key.split("/").pop()}.json`;
+
+    const resultData = {
+      success: true,
+      parsed: true,
+      r2DemoKey: r2Key,
+      r2ResultKey: resultKey,
+      totalKillEvents: kills.length,
+      realKillEvents: realKills.length,
+      players: playerStats
+    };
+
+    await r2.send(new PutObjectCommand({
+      Bucket: process.env.R2_BUCKET_NAME.trim(),
+      Key: resultKey,
+      Body: JSON.stringify(resultData, null, 2),
+      ContentType: "application/json"
+    }));
+
+    fs.unlinkSync(localPath);
+
+    res.json(resultData);
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: "Parse failed",
       error: error.message
     });
   }
