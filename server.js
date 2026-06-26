@@ -1,19 +1,30 @@
+require("dotenv").config();
 const express = require("express");
 const multer = require("multer");
 const { parseEvent } = require("@laihoe/demoparser2");
 const fs = require("fs");
-const { S3Client, PutObjectCommand } = require("@aws-sdk/client-s3");
+const { S3Client, PutObjectCommand, GetObjectCommand } = require("@aws-sdk/client-s3");
 
 const app = express();
 
 const r2 = new S3Client({
   region: "auto",
-  endpoint: `https://${process.env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`,
+  endpoint: `https://${process.env.R2_ACCOUNT_ID.trim()}.r2.cloudflarestorage.com`,
   credentials: {
-    accessKeyId: process.env.R2_ACCESS_KEY_ID,
-    secretAccessKey: process.env.R2_SECRET_ACCESS_KEY
+    accessKeyId: process.env.R2_ACCESS_KEY_ID.trim(),
+    secretAccessKey: process.env.R2_SECRET_ACCESS_KEY.trim()
   }
 });
+
+async function streamToString(stream) {
+  const chunks = [];
+
+  for await (const chunk of stream) {
+    chunks.push(Buffer.from(chunk));
+  }
+
+  return Buffer.concat(chunks).toString("utf8");
+}
 
 const upload = multer({
   dest: "uploads/"
@@ -40,7 +51,7 @@ app.post("/test-upload", upload.single("demo"), async (req, res) => {
     const r2Key = `test-uploads/${Date.now()}-${req.file.originalname}`;
 
     await r2.send(new PutObjectCommand({
-      Bucket: process.env.R2_BUCKET_NAME,
+      Bucket: process.env.R2_BUCKET_NAME.trim(),
       Key: r2Key,
       Body: fs.createReadStream(filePath),
       ContentType: req.file.mimetype || "application/octet-stream"
@@ -139,17 +150,28 @@ const playerStats = Object.values(players)
   }))
   .sort((a, b) => b.kills - a.kills);
 
-res.json({
+const resultKey = `parsed-results/${Date.now()}-${req.file.originalname}.json`;
+
+const resultData = {
   success: true,
   originalName: req.file.originalname,
   size: req.file.size,
   parsed: true,
-r2Uploaded: true,
-r2Key: r2Key,
+  r2DemoKey: r2Key,
+  r2ResultKey: resultKey,
   totalKillEvents: kills.length,
   realKillEvents: realKills.length,
   players: playerStats
-});
+};
+
+await r2.send(new PutObjectCommand({
+  Bucket: process.env.R2_BUCKET_NAME,
+  Key: resultKey,
+  Body: JSON.stringify(resultData, null, 2),
+  ContentType: "application/json"
+}));
+
+res.json(resultData);
   } catch (error) {
     res.status(500).json({
       success: false,
