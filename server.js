@@ -301,10 +301,30 @@ app.get("/results", async (req, res) => {
 });
 
 app.post("/test-cs2-history", express.json(), async (req, res) => {
-  res.json({
-    success: false,
-    message: "Endpoint shell created. Steam login next."
-  });
+  try {
+    const { shareCode } = req.body;
+
+    if (!shareCode) {
+      return res.status(400).json({
+        success: false,
+        message: "Missing shareCode"
+      });
+    }
+
+    const result = await requestMatchByShareCode(shareCode);
+
+    res.json({
+      success: true,
+      message: "Match history response received",
+      result
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: "Could not fetch match from share code",
+      error: error.message
+    });
+  }
 });
 
 app.post("/steam-login/start", async (req, res) => {
@@ -386,6 +406,27 @@ csgo.on("connectedToGC", () => {
   console.log("Connected to CS2 Game Coordinator");
   steamStatus.cs2Ready = true;
 });
+
+function requestMatchByShareCode(shareCode) {
+  return new Promise((resolve, reject) => {
+    if (!steamStatus.cs2Ready) {
+      return reject(new Error("CS2 Game Coordinator is not ready"));
+    }
+
+    const timeout = setTimeout(() => {
+      csgo.removeListener("matchList", onMatchList);
+      reject(new Error("Timed out waiting for matchList response"));
+    }, 30000);
+
+    function onMatchList(matches, data) {
+      clearTimeout(timeout);
+      resolve({ matches, raw: data });
+    }
+
+    csgo.once("matchList", onMatchList);
+    csgo.requestGame(shareCode);
+  });
+}
 
 steamClient.on("error", (error) => {
   console.error("Steam error:", error);
