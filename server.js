@@ -33,6 +33,36 @@ app.get("/upload-demo", (req, res) => {
   });
 });
 
+app.post("/test-upload", upload.single("demo"), async (req, res) => {
+  try {
+    const filePath = req.file.path;
+
+    const r2Key = `test-uploads/${Date.now()}-${req.file.originalname}`;
+
+    await r2.send(new PutObjectCommand({
+      Bucket: process.env.R2_BUCKET_NAME,
+      Key: r2Key,
+      Body: fs.createReadStream(filePath),
+      ContentType: req.file.mimetype || "application/octet-stream"
+    }));
+
+    res.json({
+      success: true,
+      message: "File uploaded to R2 successfully",
+      originalName: req.file.originalname,
+      size: req.file.size,
+      r2Uploaded: true,
+      r2Key: r2Key
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: "Test upload failed",
+      error: error.message
+    });
+  }
+});
+
 app.post("/upload-demo", upload.single("demo"), async (req, res) => {
   try {
     const filePath = req.file.path;
