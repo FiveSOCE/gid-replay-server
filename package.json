@@ -6,6 +6,8 @@
     "start": "node server.js"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1075.0",
+    "@laihoe/demoparser2": "^0.41.3",
     "express": "^4.19.2",
     "multer": "^2.2.0"
   }
