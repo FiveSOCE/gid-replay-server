@@ -259,6 +259,34 @@ app.post("/parse-demo", express.json(), async (req, res) => {
   }
 });
 
+app.get("/results", async (req, res) => {
+  try {
+    const key = req.query.key;
+
+    if (!key) {
+      return res.status(400).json({
+        success: false,
+        message: "Missing ?key=parsed-results/filename.json"
+      });
+    }
+
+    const result = await r2.send(new GetObjectCommand({
+      Bucket: process.env.R2_BUCKET_NAME.trim(),
+      Key: key
+    }));
+
+    const text = await streamToString(result.Body);
+
+    res.json(JSON.parse(text));
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: "Could not fetch result",
+      error: error.message
+    });
+  }
+});
+
 const PORT = process.env.PORT || 3000;
 
 app.listen(PORT, () => {
