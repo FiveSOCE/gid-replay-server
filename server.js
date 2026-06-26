@@ -4,6 +4,7 @@ const multer = require("multer");
 const { parseEvent } = require("@laihoe/demoparser2");
 const fs = require("fs");
 const { S3Client, PutObjectCommand, GetObjectCommand } = require("@aws-sdk/client-s3");
+const { getSignedUrl } = require("@aws-sdk/s3-request-presigner");
 
 const app = express();
 
@@ -42,6 +43,36 @@ app.get("/upload-demo", (req, res) => {
     status: "success",
     message: "Upload endpoint exists. Use POST to upload a demo."
   });
+});
+
+app.post("/create-upload-url", express.json(), async (req, res) => {
+  try {
+    const fileName = req.body.fileName || `demo-${Date.now()}.dem`;
+    const r2Key = `raw-demos/${Date.now()}-${fileName}`;
+
+    const command = new PutObjectCommand({
+      Bucket: process.env.R2_BUCKET_NAME.trim(),
+      Key: r2Key,
+      ContentType: "application/octet-stream"
+    });
+
+    const uploadUrl = await getSignedUrl(r2, command, {
+      expiresIn: 60 * 10
+    });
+
+    res.json({
+      success: true,
+      r2Key,
+      uploadUrl,
+      expiresInSeconds: 600
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: "Could not create upload URL",
+      error: error.message
+    });
+  }
 });
 
 app.post("/test-upload", upload.single("demo"), async (req, res) => {
