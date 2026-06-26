@@ -11,6 +11,8 @@
     "@laihoe/demoparser2": "^0.41.3",
     "dotenv": "^17.4.2",
     "express": "^4.19.2",
-    "multer": "^2.2.0"
+    "globaloffensive": "^3.3.0",
+    "multer": "^2.2.0",
+    "steam-user": "^5.3.0"
   }
 }

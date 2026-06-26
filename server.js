@@ -5,6 +5,8 @@ const { parseEvent } = require("@laihoe/demoparser2");
 const fs = require("fs");
 const { S3Client, PutObjectCommand, GetObjectCommand } = require("@aws-sdk/client-s3");
 const { getSignedUrl } = require("@aws-sdk/s3-request-presigner");
+const SteamUser = require("steam-user");
+const GlobalOffensive = require("globaloffensive");
 
 const app = express();
 
@@ -285,6 +287,13 @@ app.get("/results", async (req, res) => {
       error: error.message
     });
   }
+});
+
+app.post("/test-cs2-history", express.json(), async (req, res) => {
+  res.json({
+    success: false,
+    message: "Endpoint shell created. Steam login next."
+  });
 });
 
 const PORT = process.env.PORT || 3000;
