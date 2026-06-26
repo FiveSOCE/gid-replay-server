@@ -81,98 +81,20 @@ app.post("/upload-demo", upload.single("demo"), async (req, res) => {
 const r2Key = `raw-demos/${Date.now()}-${req.file.originalname}`;
 
 await r2.send(new PutObjectCommand({
-  Bucket: process.env.R2_BUCKET_NAME,
+  Bucket: process.env.R2_BUCKET_NAME.trim(),
   Key: r2Key,
   Body: fs.createReadStream(filePath),
   ContentType: "application/octet-stream"
 }));
 
-    const kills = parseEvent(
-      filePath,
-      "player_death",
-      ["attacker_name", "user_name", "weapon", "headshot"],
-      ["total_rounds_played"]
-    );
-
-const realKills = kills.filter(kill => kill.total_rounds_played > 0);
-
-const players = {};
-
-for (const kill of realKills) {
-  const attackerId = kill.attacker_steamid;
-  const victimId = kill.user_steamid;
-
-  if (attackerId) {
-    if (!players[attackerId]) {
-      players[attackerId] = {
-        steamid: attackerId,
-        name: kill.attacker_name,
-        kills: 0,
-        deaths: 0,
-        headshots: 0
-      };
-    }
-
-    players[attackerId].kills += 1;
-
-    if (kill.headshot) {
-      players[attackerId].headshots += 1;
-    }
-  }
-
-  if (victimId) {
-    if (!players[victimId]) {
-      players[victimId] = {
-        steamid: victimId,
-        name: kill.user_name,
-        kills: 0,
-        deaths: 0,
-        headshots: 0
-      };
-    }
-
-    players[victimId].deaths += 1;
-  }
-}
-
-const playerStats = Object.values(players)
-  .map(player => ({
-    ...player,
-    kd:
-      player.deaths > 0
-        ? Math.round((player.kills / player.deaths) * 100) / 100
-        : player.kills,
-    killDeathDiff: player.kills - player.deaths,
-    headshotPercent:
-      player.kills > 0
-        ? Math.round((player.headshots / player.kills) * 1000) / 10
-        : 0
-  }))
-  .sort((a, b) => b.kills - a.kills);
-
-const resultKey = `parsed-results/${Date.now()}-${req.file.originalname}.json`;
-
-const resultData = {
+res.json({
   success: true,
+  message: "Demo uploaded to R2 successfully. Parsing not started yet.",
   originalName: req.file.originalname,
   size: req.file.size,
-  parsed: true,
-  r2DemoKey: r2Key,
-  r2ResultKey: resultKey,
-  totalKillEvents: kills.length,
-  realKillEvents: realKills.length,
-  players: playerStats
-};
-
-await r2.send(new PutObjectCommand({
-  Bucket: process.env.R2_BUCKET_NAME,
-  Key: resultKey,
-  Body: JSON.stringify(resultData, null, 2),
-  ContentType: "application/json"
-}));
-
-res.json(resultData);
-  } catch (error) {
+  r2Uploaded: true,
+  r2DemoKey: r2Key
+});  } catch (error) {
     res.status(500).json({
       success: false,
       message: "Demo uploaded, but parsing failed",
