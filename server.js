@@ -17,6 +17,7 @@ let pendingSteamGuardCallback = null;
 let steamStatus = {
   loggedIn: false,
   steamGuardRequired: false,
+  cs2Ready: false,
   lastError: null
 };
 
@@ -378,6 +379,12 @@ steamClient.on("loggedOn", () => {
 
   steamClient.setPersona(SteamUser.EPersonaState.Online);
   steamClient.gamesPlayed([730]);
+console.log("Requested CS2 Game Coordinator connection");
+});
+
+csgo.on("connectedToGC", () => {
+  console.log("Connected to CS2 Game Coordinator");
+  steamStatus.cs2Ready = true;
 });
 
 steamClient.on("error", (error) => {
